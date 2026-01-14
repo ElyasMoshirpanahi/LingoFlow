@@ -42,7 +42,7 @@ const BookReader: React.FC<BookReaderProps> = ({
             e.stopPropagation();
             onWordClick(cleanWord, context);
           }}
-          className="hover:text-sky-400 hover:bg-sky-400/10 rounded-sm px-0.5 transition-all cursor-help border-b border-transparent hover:border-sky-500/50"
+          className="hover:text-sky-400 hover:underline decoration-sky-500/50 underline-offset-4 cursor-help transition-all"
         >
           {word}
         </span>
@@ -51,7 +51,7 @@ const BookReader: React.FC<BookReaderProps> = ({
   };
 
   return (
-    <div className="space-y-12 pb-48 max-w-4xl mx-auto w-full px-6 pt-12" ref={scrollRef}>
+    <div className="space-y-4 sm:space-y-6 pb-64 max-w-3xl mx-auto w-full px-4" ref={scrollRef}>
       {chapter.sentences.map((sentence, idx) => {
         const isActive = currentIndex === idx;
         const isEnPlaying = isActive && playbackState === PlaybackState.PLAYING_EN;
@@ -62,34 +62,30 @@ const BookReader: React.FC<BookReaderProps> = ({
             key={sentence.id}
             ref={isActive ? activeRef : null}
             onClick={() => onSelectSentence(idx)}
-            className={`group transition-all duration-700 p-10 rounded-[2.5rem] cursor-pointer relative overflow-hidden ${
+            className={`group transition-all duration-500 p-6 sm:p-8 rounded-2xl cursor-pointer border border-transparent ${
               isActive 
-                ? 'cyber-card border-sky-500/30 shadow-[0_0_50px_rgba(14,165,233,0.1)] scale-[1.02] z-10' 
-                : 'opacity-30 grayscale hover:grayscale-0 hover:opacity-60 bg-transparent'
+                ? 'bg-spotify-grey/40 border-sky-500/20 active-pulse' 
+                : 'opacity-10 hover:opacity-40 grayscale hover:grayscale-0'
             }`}
           >
-            {isActive && (
-              <div className="absolute top-0 left-0 w-1 h-full cyber-bg-blue"></div>
-            )}
-            
-            <div className="space-y-8">
+            <div className="space-y-4 sm:space-y-6">
               {/* Learning Content */}
-              <p className={`text-3xl leading-relaxed transition-all duration-500 font-medium ${
+              <p className={`text-xl sm:text-2xl leading-relaxed transition-all duration-300 font-semibold ${
                 isEnPlaying 
-                  ? 'text-sky-400 drop-shadow-[0_0_8px_rgba(56,189,248,0.3)]' 
-                  : isActive ? 'text-white' : 'text-slate-500'
+                  ? 'text-sky-400 scale-[1.01] origin-left' 
+                  : isActive ? 'text-white' : 'text-spotify-active'
               }`}>
                 {renderTextWithWordClicks(sentence.enText, sentence.enText)}
               </p>
 
               {/* Translation (Origin) */}
-              <div className={`transition-all duration-1000 ease-in-out overflow-hidden ${
-                isActive ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0'
+              <div className={`transition-all duration-700 ease-in-out overflow-hidden ${
+                isActive ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'
               }`}>
-                <div className={`p-8 rounded-3xl border border-slate-800/50 persian-text text-3xl leading-[2.2] transition-all duration-500 ${
+                <div className={`p-4 sm:p-6 rounded-xl persian-text text-2xl sm:text-3xl leading-[2] transition-all duration-300 ${
                   isFaPlaying 
-                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 shadow-[inset_0_0_20px_rgba(16,185,129,0.05)]' 
-                    : 'bg-slate-900/50 text-slate-400'
+                    ? 'text-emerald-400 animate-pulse' 
+                    : 'text-spotify-active'
                 }`}>
                   {sentence.faText}
                 </div>
@@ -97,13 +93,14 @@ const BookReader: React.FC<BookReaderProps> = ({
             </div>
 
             {isActive && (
-              <div className="flex items-center gap-4 mt-8">
-                <div className="flex gap-1.5">
-                  <div className={`w-2 h-2 rounded-full ${isEnPlaying ? 'bg-sky-500 animate-pulse' : 'bg-slate-700'}`}></div>
-                  <div className={`w-2 h-2 rounded-full ${isFaPlaying ? 'bg-emerald-500 animate-pulse' : 'bg-slate-700'}`}></div>
+              <div className="flex items-center gap-3 mt-4">
+                <div className="flex gap-1">
+                  <span className={`w-1 h-3 rounded-full ${isEnPlaying ? 'bg-sky-500 animate-bounce' : 'bg-spotify-grey'}`}></span>
+                  <span className={`w-1 h-4 rounded-full ${isEnPlaying ? 'bg-sky-400 animate-bounce delay-75' : 'bg-spotify-grey'}`}></span>
+                  <span className={`w-1 h-2 rounded-full ${isEnPlaying ? 'bg-sky-300 animate-bounce delay-150' : 'bg-spotify-grey'}`}></span>
                 </div>
-                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 mono">
-                  {isEnPlaying ? 'Processing_Origin' : isFaPlaying ? 'Syncing_Neural_Translation' : 'Standby'}
+                <span className="text-[9px] font-black uppercase tracking-[0.1em] text-spotify-active font-mono">
+                  {isEnPlaying ? 'SOURCE_PLAYBACK' : isFaPlaying ? 'TRANSLATION_SYNC' : 'READY'}
                 </span>
               </div>
             )}
