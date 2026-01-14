@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { PlaybackState, Sentence, Chapter, Book, Definition } from './types.ts';
-import { processText, generateTTS, getWordDefinition } from './services/gemini.ts';
-import Header from './components/Header.tsx';
-import ControlPanel from './components/ControlPanel.tsx';
-import BookReader from './components/BookReader.tsx';
-import UploadSection from './components/UploadSection.tsx';
-import VocabularyModal from './components/VocabularyModal.tsx';
+import { PlaybackState, Sentence, Chapter, Book, Definition } from './types';
+import { processText, generateTTS, getWordDefinition } from './services/gemini';
+import Header from './components/Header';
+import ControlPanel from './components/ControlPanel';
+import BookReader from './components/BookReader';
+import UploadSection from './components/UploadSection';
+import VocabularyModal from './components/VocabularyModal';
 
 type ViewState = 'UPLOAD' | 'LIBRARY' | 'READER';
 
@@ -20,7 +20,6 @@ const App: React.FC = () => {
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [definition, setDefinition] = useState<Definition | null>(null);
   const [defLoading, setDefLoading] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
   
   const audioContextRef = useRef<AudioContext | null>(null);
   const activeSourceRef = useRef<AudioBufferSourceNode | null>(null);
@@ -28,7 +27,7 @@ const App: React.FC = () => {
 
   // Persistence: Load Library
   useEffect(() => {
-    const saved = localStorage.getItem('lingoflow_vault_v3');
+    const saved = localStorage.getItem('lingoflow_vault_v2');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -43,7 +42,7 @@ const App: React.FC = () => {
   // Persistence: Save Library
   useEffect(() => {
     if (library.length > 0) {
-      localStorage.setItem('lingoflow_vault_v3', JSON.stringify(library));
+      localStorage.setItem('lingoflow_vault_v2', JSON.stringify(library));
     }
   }, [library]);
 
@@ -88,7 +87,7 @@ const App: React.FC = () => {
       console.error(error);
       setPlaybackState(PlaybackState.IDLE);
       setView('UPLOAD');
-      alert("Neural Processing Fault. Please check your Gemini API key.");
+      alert("Neural Processing Fault. Check API connection.");
     }
   };
 
@@ -113,7 +112,7 @@ const App: React.FC = () => {
   }, [playbackSpeed]);
 
   const preloadSentence = useCallback(async (index: number) => {
-    if (!activeBook || index < 0 || index >= activeBook.chapters[currentChapterIdx].sentences.length || preloadQueueRef.current.has(index)) {
+    if (!activeBook || index >= activeBook.chapters[currentChapterIdx].sentences.length || preloadQueueRef.current.has(index)) {
       return;
     }
 
@@ -150,7 +149,7 @@ const App: React.FC = () => {
     initAudioContext();
     const ctx = audioContextRef.current!;
 
-    // Aggressive preloading
+    // Pre-warm the next 2 vectors
     preloadSentence(index + 1);
     preloadSentence(index + 2);
 
@@ -165,7 +164,7 @@ const App: React.FC = () => {
         if (enBuffer) {
           await playAudio(enBuffer, () => playSentence(index, true));
         } else {
-          playSentence(index, true); 
+          playSentence(index, true); // Fallback if audio fails
         }
       } else {
         setPlaybackState(PlaybackState.PLAYING_FA);
@@ -201,39 +200,24 @@ const App: React.FC = () => {
     }
   }, [playbackState, currentIndex, playSentence, stopPlayback]);
 
-  const handleNext = useCallback(async () => {
+  const handleNext = useCallback(() => {
     stopPlayback();
-    if (!activeBook) return;
-    const total = activeBook.chapters[currentChapterIdx].sentences.length;
+    const total = activeBook?.chapters[currentChapterIdx].sentences.length || 1;
     const nextIdx = Math.min(currentIndex + 1, total - 1);
     setCurrentIndex(nextIdx);
-    
-    // Immediate audio check
     if (playbackState !== PlaybackState.IDLE && playbackState !== PlaybackState.PAUSED) {
-      const sentence = activeBook.chapters[currentChapterIdx].sentences[nextIdx];
-      if (!sentence.enAudio) {
-        setPlaybackState(PlaybackState.PROCESSING);
-        await preloadSentence(nextIdx);
-      }
       playSentence(nextIdx);
     }
-  }, [currentIndex, activeBook, currentChapterIdx, playbackState, playSentence, stopPlayback, preloadSentence]);
+  }, [currentIndex, activeBook, currentChapterIdx, playbackState, playSentence, stopPlayback]);
 
-  const handlePrev = useCallback(async () => {
+  const handlePrev = useCallback(() => {
     stopPlayback();
-    if (!activeBook) return;
     const prevIdx = Math.max(currentIndex - 1, 0);
     setCurrentIndex(prevIdx);
-    
     if (playbackState !== PlaybackState.IDLE && playbackState !== PlaybackState.PAUSED) {
-      const sentence = activeBook.chapters[currentChapterIdx].sentences[prevIdx];
-      if (!sentence.enAudio) {
-        setPlaybackState(PlaybackState.PROCESSING);
-        await preloadSentence(prevIdx);
-      }
       playSentence(prevIdx);
     }
-  }, [currentIndex, activeBook, currentChapterIdx, playbackState, playSentence, stopPlayback, preloadSentence]);
+  }, [currentIndex, playbackState, playSentence, stopPlayback]);
 
   const handleWordClick = async (word: string, context: string) => {
     if (!activeBook) return;
@@ -245,98 +229,13 @@ const App: React.FC = () => {
       const def = await getWordDefinition(word, context, activeBook.targetLang);
       setDefinition(def);
     } catch (e) {
-      alert("Neural Lookup Error. Check API connection.");
+      alert("Neural Lookup Error.");
     } finally {
       setDefLoading(false);
     }
   };
 
-  const exportBookAudio = async (book: Book) => {
-    const confirmExport = window.confirm(`Generate neural audio file for "${book.title}"? This will process all sentences.`);
-    if (!confirmExport) return;
-
-    setIsExporting(true);
-    initAudioContext();
-    const ctx = audioContextRef.current!;
-    const allSentences = book.chapters.flatMap(c => c.sentences);
-    const audioBuffers: AudioBuffer[] = [];
-
-    try {
-      for (let i = 0; i < allSentences.length; i++) {
-        const s = allSentences[i];
-        const en = s.enAudio || await generateTTS(s.enText, book.sourceLang, ctx);
-        const fa = s.faAudio || await generateTTS(s.faText, book.targetLang, ctx);
-        if (en) audioBuffers.push(en);
-        if (fa) audioBuffers.push(fa);
-        setLoadingProgress(Math.round(((i + 1) / allSentences.length) * 100));
-      }
-
-      // Concatenate Buffers
-      const totalLength = audioBuffers.reduce((acc, buf) => acc + buf.length, 0);
-      const mergedBuffer = ctx.createBuffer(1, totalLength, ctx.sampleRate);
-      let offset = 0;
-      for (const buffer of audioBuffers) {
-        mergedBuffer.getChannelData(0).set(buffer.getChannelData(0), offset);
-        offset += buffer.length;
-      }
-
-      // Export as WAV
-      const wavBlob = audioBufferToWav(mergedBuffer);
-      const url = URL.createObjectURL(wavBlob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${book.title.replace(/\s+/g, '_')}_Audiobook.wav`;
-      link.click();
-    } catch (e) {
-      alert("Export failed during neural processing.");
-    } finally {
-      setIsExporting(false);
-      setLoadingProgress(0);
-    }
-  };
-
-  // Helper: Simple WAV conversion
-  // Fix: changed variable declarations from const to let where reassignment occurs.
-  const audioBufferToWav = (buffer: AudioBuffer) => {
-    const numOfChan = buffer.numberOfChannels;
-    const length = buffer.length * numOfChan * 2 + 44;
-    const bufferArray = new ArrayBuffer(length);
-    const view = new DataView(bufferArray);
-    const channels = [];
-    let i, sample;
-    let pos = 0;
-
-    const setUint16 = (data: number) => { view.setUint16(pos, data, true); pos += 2; };
-    const setUint32 = (data: number) => { view.setUint32(pos, data, true); pos += 4; };
-
-    // write WAVE header
-    const writeString = (s: string) => { for (let i = 0; i < s.length; i++) view.setUint8(pos + i, s.charCodeAt(i)); pos += s.length; };
-    
-    let p = 0;
-    const writeS = (s: string) => { for (let i = 0; i < s.length; i++) view.setUint8(p + i, s.charCodeAt(i)); p += s.length; };
-    writeS("RIFF"); view.setUint32(4, length - 8, true); p = 8;
-    writeS("WAVE"); writeS("fmt "); view.setUint32(16, 16, true); p = 20;
-    view.setUint16(20, 1, true); view.setUint16(22, numOfChan, true); p = 24;
-    view.setUint32(24, buffer.sampleRate, true); view.setUint32(28, buffer.sampleRate * 2 * numOfChan, true); p = 32;
-    view.setUint16(32, numOfChan * 2, true); view.setUint16(34, 16, true); p = 36;
-    writeS("data"); view.setUint32(40, length - 44, true); p = 44;
-
-    for(i = 0; i < numOfChan; i++) channels.push(buffer.getChannelData(i));
-
-    let samplePos = 0;
-    while(p < length) {
-      for(i = 0; i < numOfChan; i++) {
-        sample = Math.max(-1, Math.min(1, channels[i][samplePos]));
-        sample = (sample < 0 ? sample * 0x8000 : sample * 0x7FFF) | 0;
-        view.setInt16(p, sample, true);
-        p += 2;
-      }
-      samplePos++;
-    }
-
-    return new Blob([bufferArray], { type: "audio/wav" });
-  };
-
+  // Global Keyboard Logic
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (view !== 'READER' || definition || defLoading) return;
@@ -356,66 +255,80 @@ const App: React.FC = () => {
   }, [view, handlePlayToggle, handleNext, handlePrev, definition, defLoading]);
 
   return (
-    <div className="flex flex-col h-screen bg-spotify-black overflow-hidden font-sans text-white">
+    <div className="flex flex-col h-screen bg-slate-950 overflow-hidden font-sans text-slate-100 selection:bg-sky-500/30">
       <Header currentView={view} setView={setView} />
       
-      <main className="flex-1 overflow-hidden relative spotify-gradient">
+      <main className="flex-1 overflow-hidden relative">
         {view === 'UPLOAD' && (
-          <div className="h-full overflow-y-auto flex flex-col items-center p-4 sm:p-8 scroll-smooth">
+          <div className="h-full overflow-y-auto flex flex-col items-center p-8 scroll-smooth">
             <UploadSection onUpload={handleFileUpload} />
           </div>
         )}
 
         {view === 'LIBRARY' && (
-          <div className="h-full overflow-y-auto p-4 sm:p-8 max-w-5xl mx-auto w-full">
-            <h3 className="text-2xl font-bold mb-6 flex items-center gap-3">Your Library</h3>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6 pb-20">
-              {library.map(book => (
-                <div 
-                  key={book.id}
-                  className="spotify-card p-4 group cursor-pointer relative"
-                  onClick={() => { setActiveBook(book); setView('READER'); setCurrentIndex(0); }}
+          <div className="h-full overflow-y-auto p-8 max-w-4xl mx-auto w-full">
+            <h3 className="text-2xl font-black text-white italic tracking-tighter uppercase mb-8 flex items-center gap-3">
+              <span className="w-1.5 h-6 bg-sky-500 rounded-full shadow-[0_0_10px_rgba(56,189,248,0.5)]"></span>
+              Neural Repository
+            </h3>
+            {library.length === 0 ? (
+              <div className="cyber-card p-16 rounded-3xl text-center border-dashed border-slate-800">
+                <p className="text-slate-500 mono uppercase tracking-widest text-xs">No active datasets found</p>
+                <button 
+                  onClick={() => setView('UPLOAD')}
+                  className="mt-6 text-sky-400 font-bold hover:text-white transition-colors text-sm uppercase mono"
                 >
-                  <div className="aspect-square bg-spotify-grey rounded-md mb-4 flex items-center justify-center relative overflow-hidden group">
-                    <svg className="w-16 h-16 text-spotify-grey brightness-125" fill="currentColor" viewBox="0 0 20 20">
-                      <path d="M9 4.804A7.968 7.968 0 005.5 4c-1.255 0-2.443.29-3.5.804v10A7.969 7.969 0 015.5 14c1.669 0 3.218.51 4.5 1.385A7.962 7.962 0 0114.5 14c1.255 0 2.443.29 3.5.804v-10A7.968 7.968 0 0014.5 4c-1.255 0-2.443.29-3.5.804V12a1 1 0 11-2 0V4.804z" />
-                    </svg>
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); exportBookAudio(book); }}
-                      className="absolute bottom-2 right-2 p-3 bg-sky-500 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transform translate-y-2 group-hover:translate-y-0 transition-all hover:scale-110"
-                      title="Export to Audio File"
-                    >
-                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  Initiate_Inbound_Transfer ->
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-6 pb-20">
+                {library.map(book => (
+                  <div 
+                    key={book.id}
+                    onClick={() => { setActiveBook(book); setView('READER'); setCurrentIndex(0); }}
+                    className="cyber-card p-8 rounded-3xl group cursor-pointer hover:border-sky-500/40 hover:bg-slate-900/50 transition-all flex justify-between items-center"
+                  >
+                    <div>
+                      <h4 className="text-xl font-bold text-white group-hover:text-sky-400 transition-colors uppercase italic tracking-tight">{book.title}</h4>
+                      <div className="flex gap-4 mt-2">
+                         <span className="text-[10px] text-slate-500 font-black mono uppercase tracking-widest">
+                          {book.sourceLang} → {book.targetLang}
+                        </span>
+                        <span className="text-[10px] text-sky-500/60 font-black mono uppercase tracking-widest">
+                          {book.chapters[0].sentences.length} Lexical_Vectors
+                        </span>
+                      </div>
+                    </div>
+                    <div className="p-4 rounded-2xl bg-slate-900 text-slate-700 group-hover:bg-sky-500 group-hover:text-white transition-all shadow-inner">
+                      <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
                       </svg>
-                    </button>
+                    </div>
                   </div>
-                  <h4 className="font-bold text-sm line-clamp-1 mb-1">{book.title}</h4>
-                  <p className="text-spotify-active text-xs font-medium uppercase tracking-tighter">
-                    {book.sourceLang} &bull; {book.chapters[0].sentences.length} Sentences
-                  </p>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
         {view === 'READER' && (
           <div className="h-full flex flex-col">
-            {(playbackState === PlaybackState.PROCESSING || isExporting) && (
-              <div className="absolute inset-0 z-50 bg-black/90 backdrop-blur-xl flex flex-col items-center justify-center p-12 text-center">
-                <div className="w-20 h-20 border-4 border-sky-500/20 border-t-sky-500 rounded-full animate-spin mb-6"></div>
-                <h3 className="text-xl font-bold mb-2 uppercase tracking-tighter italic">
-                  {isExporting ? 'Generating Neural Stream' : 'Calibrating Vector Map'}
-                </h3>
-                <div className="w-64 h-1 bg-spotify-grey rounded-full overflow-hidden mb-4">
-                    <div className="h-full bg-sky-500 transition-all duration-300" style={{ width: `${loadingProgress}%` }}></div>
+            {playbackState === PlaybackState.PROCESSING && (
+              <div className="absolute inset-0 z-50 bg-slate-950/95 backdrop-blur-3xl flex flex-col items-center justify-center p-12">
+                <div className="w-48 h-48 relative flex items-center justify-center mb-8">
+                  <div className="absolute inset-0 border-2 border-sky-500/10 rounded-full"></div>
+                  <div className="absolute inset-0 border-t-2 border-sky-500 rounded-full animate-spin"></div>
+                  <div className="text-center">
+                    <span className="text-3xl font-black text-white italic tracking-tighter">{loadingProgress}%</span>
+                    <p className="text-[9px] text-sky-400 mono font-bold uppercase tracking-widest mt-1">Ingesting</p>
+                  </div>
                 </div>
-                <p className="text-spotify-active text-xs font-mono uppercase tracking-[0.2em]">Progress: {loadingProgress}%</p>
+                <p className="text-slate-500 mono uppercase tracking-widest text-[10px] animate-pulse">Synchronizing neural linguistic pathways...</p>
               </div>
             )}
 
-            <div className="flex-1 overflow-y-auto no-scrollbar relative pt-6">
+            <div className="flex-1 overflow-y-auto no-scrollbar relative">
               <BookReader 
                 chapter={activeBook?.chapters[currentChapterIdx] || null} 
                 currentIndex={currentIndex} 
@@ -430,7 +343,6 @@ const App: React.FC = () => {
               currentIndex={currentIndex}
               totalSentences={activeBook?.chapters[currentChapterIdx].sentences.length || 0}
               playbackSpeed={playbackSpeed}
-              title={activeBook?.title || ""}
               onPlayPause={handlePlayToggle}
               onNext={handleNext}
               onPrev={handlePrev}
@@ -445,6 +357,18 @@ const App: React.FC = () => {
         loading={defLoading}
         onClose={() => setDefinition(null)}
       />
+
+      {activeBook && view === 'READER' && (
+        <button 
+          onClick={() => { stopPlayback(); setView('LIBRARY'); setPlaybackState(PlaybackState.IDLE); }}
+          className="fixed top-24 left-8 z-30 p-3 cyber-card rounded-xl text-slate-500 hover:text-sky-400 transition-all border border-slate-800"
+          title="Exit to Vault"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+      )}
     </div>
   );
 };

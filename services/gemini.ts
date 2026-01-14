@@ -1,5 +1,8 @@
-
 import { GoogleGenAI, Type, Modality } from "@google/genai";
+
+const getApiKey = () => {
+  return process.env.API_KEY || '';
+};
 
 export const decodeBase64 = (base64: string): Uint8Array => {
   const binaryString = atob(base64);
@@ -35,7 +38,7 @@ export const processText = async (
   sourceLang: string, 
   targetLang: string
 ): Promise<{ en: string; fa: string }[]> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({ apiKey: getApiKey() });
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
     contents: `Split the following text into individual sentences. The text is in ${sourceLang}. Translate each into clear, contextual ${targetLang}. Return a JSON array of objects with keys "en" (original) and "fa" (translation).\n\nText: ${text}`,
@@ -58,7 +61,7 @@ export const processText = async (
   try {
     return JSON.parse(response.text || '[]');
   } catch (e) {
-    console.error("Failed to parse Gemini response", e);
+    console.error("Neural Ingestion Error: Failed to parse vector array", e);
     return [];
   }
 };
@@ -68,7 +71,7 @@ export const getWordDefinition = async (
   context: string, 
   targetLang: string
 ): Promise<{ word: string, definition: string, example: string }> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({ apiKey: getApiKey() });
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
     contents: `Explain the word "${word}" as used in this context: "${context}". Provide the definition and an example sentence in ${targetLang}.`,
@@ -101,7 +104,7 @@ export const generateTTS = async (
   langName: string, 
   audioContext: AudioContext
 ): Promise<AudioBuffer | null> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({ apiKey: getApiKey() });
   const voiceName = VOICE_MAP[langName] || 'Kore';
   
   const response = await ai.models.generateContent({
