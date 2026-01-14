@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef } from 'react';
 import { Chapter, PlaybackState } from '../types';
 
@@ -7,9 +6,16 @@ interface BookReaderProps {
   currentIndex: number;
   playbackState: PlaybackState;
   onSelectSentence: (idx: number) => void;
+  onWordClick: (word: string, context: string) => void;
 }
 
-const BookReader: React.FC<BookReaderProps> = ({ chapter, currentIndex, playbackState, onSelectSentence }) => {
+const BookReader: React.FC<BookReaderProps> = ({ 
+  chapter, 
+  currentIndex, 
+  playbackState, 
+  onSelectSentence,
+  onWordClick 
+}) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef<HTMLDivElement>(null);
 
@@ -24,8 +30,28 @@ const BookReader: React.FC<BookReaderProps> = ({ chapter, currentIndex, playback
 
   if (!chapter) return null;
 
+  const renderTextWithWordClicks = (text: string, context: string) => {
+    const words = text.split(/(\s+)/);
+    return words.map((word, i) => {
+      if (/\s+/.test(word)) return word;
+      const cleanWord = word.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "");
+      return (
+        <span 
+          key={i} 
+          onClick={(e) => {
+            e.stopPropagation();
+            onWordClick(cleanWord, context);
+          }}
+          className="hover:text-sky-400 hover:bg-sky-400/10 rounded-sm px-0.5 transition-all cursor-help border-b border-transparent hover:border-sky-500/50"
+        >
+          {word}
+        </span>
+      );
+    });
+  };
+
   return (
-    <div className="space-y-6 pb-12" ref={scrollRef}>
+    <div className="space-y-12 pb-48 max-w-4xl mx-auto w-full px-6 pt-12" ref={scrollRef}>
       {chapter.sentences.map((sentence, idx) => {
         const isActive = currentIndex === idx;
         const isEnPlaying = isActive && playbackState === PlaybackState.PLAYING_EN;
@@ -36,44 +62,49 @@ const BookReader: React.FC<BookReaderProps> = ({ chapter, currentIndex, playback
             key={sentence.id}
             ref={isActive ? activeRef : null}
             onClick={() => onSelectSentence(idx)}
-            className={`group transition-all duration-300 p-6 rounded-2xl cursor-pointer border ${
+            className={`group transition-all duration-700 p-10 rounded-[2.5rem] cursor-pointer relative overflow-hidden ${
               isActive 
-                ? 'bg-white border-blue-200 shadow-xl scale-[1.02]' 
-                : 'bg-transparent border-transparent hover:bg-slate-100/50'
+                ? 'cyber-card border-sky-500/30 shadow-[0_0_50px_rgba(14,165,233,0.1)] scale-[1.02] z-10' 
+                : 'opacity-30 grayscale hover:grayscale-0 hover:opacity-60 bg-transparent'
             }`}
           >
-            <div className="space-y-4">
-              {/* English Text */}
-              <p className={`text-xl md:text-2xl leading-relaxed transition-colors duration-300 ${
+            {isActive && (
+              <div className="absolute top-0 left-0 w-1 h-full cyber-bg-blue"></div>
+            )}
+            
+            <div className="space-y-8">
+              {/* Learning Content */}
+              <p className={`text-3xl leading-relaxed transition-all duration-500 font-medium ${
                 isEnPlaying 
-                  ? 'bg-yellow-200 text-slate-900 px-2 -mx-2 rounded' 
-                  : isActive ? 'text-slate-900 font-medium' : 'text-slate-600'
+                  ? 'text-sky-400 drop-shadow-[0_0_8px_rgba(56,189,248,0.3)]' 
+                  : isActive ? 'text-white' : 'text-slate-500'
               }`}>
-                {sentence.enText}
+                {renderTextWithWordClicks(sentence.enText, sentence.enText)}
               </p>
 
-              {/* Persian Translation - Show when active or on hover */}
-              <div className={`transition-all duration-500 overflow-hidden ${
-                isActive ? 'max-h-96 opacity-100 mt-4' : 'max-h-0 opacity-0'
+              {/* Translation (Origin) */}
+              <div className={`transition-all duration-1000 ease-in-out overflow-hidden ${
+                isActive ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0'
               }`}>
-                <div className={`p-4 rounded-xl border-r-4 persian-text text-xl md:text-2xl leading-loose transition-all duration-300 ${
+                <div className={`p-8 rounded-3xl border border-slate-800/50 persian-text text-3xl leading-[2.2] transition-all duration-500 ${
                   isFaPlaying 
-                    ? 'bg-emerald-100 border-emerald-500 text-emerald-950' 
-                    : 'bg-slate-50 border-slate-300 text-slate-700'
+                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 shadow-[inset_0_0_20px_rgba(16,185,129,0.05)]' 
+                    : 'bg-slate-900/50 text-slate-400'
                 }`}>
                   {sentence.faText}
                 </div>
               </div>
             </div>
 
-            {/* Status indicator for active sentence */}
             {isActive && (
-              <div className="flex items-center gap-2 mt-4 text-xs font-semibold uppercase tracking-wider text-blue-600">
-                <span className="flex h-2 w-2 relative">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+              <div className="flex items-center gap-4 mt-8">
+                <div className="flex gap-1.5">
+                  <div className={`w-2 h-2 rounded-full ${isEnPlaying ? 'bg-sky-500 animate-pulse' : 'bg-slate-700'}`}></div>
+                  <div className={`w-2 h-2 rounded-full ${isFaPlaying ? 'bg-emerald-500 animate-pulse' : 'bg-slate-700'}`}></div>
+                </div>
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 mono">
+                  {isEnPlaying ? 'Processing_Origin' : isFaPlaying ? 'Syncing_Neural_Translation' : 'Standby'}
                 </span>
-                {isEnPlaying ? 'English Audio' : isFaPlaying ? 'Persian Audio' : 'Ready'}
               </div>
             )}
           </div>

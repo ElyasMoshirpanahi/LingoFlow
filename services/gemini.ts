@@ -1,7 +1,6 @@
 
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 
-// Standard base64 decoding helper
 export const decodeBase64 = (base64: string): Uint8Array => {
   const binaryString = atob(base64);
   const len = binaryString.length;
@@ -12,7 +11,6 @@ export const decodeBase64 = (base64: string): Uint8Array => {
   return bytes;
 };
 
-// PCM decoding helper according to guidelines
 export const decodeAudioPCM = async (
   data: Uint8Array,
   ctx: AudioContext,
@@ -32,13 +30,15 @@ export const decodeAudioPCM = async (
   return buffer;
 };
 
-// Process input text using Gemini 3 Flash
-export const processText = async (text: string): Promise<{ en: string; fa: string }[]> => {
-  // Always use process.env.API_KEY directly in the constructor
+export const processText = async (
+  text: string, 
+  sourceLang: string, 
+  targetLang: string
+): Promise<{ en: string; fa: string }[]> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: `Split the following text into individual sentences and translate each into clear, contextual Persian. Return a JSON array of objects with keys "en" and "fa".\n\nText: ${text}`,
+    contents: `Split the following text into individual sentences. The text is in ${sourceLang}. Translate each into clear, contextual ${targetLang}. Return a JSON array of objects with keys "en" (original) and "fa" (translation).\n\nText: ${text}`,
     config: {
       responseMimeType: "application/json",
       responseSchema: {
@@ -56,7 +56,6 @@ export const processText = async (text: string): Promise<{ en: string; fa: strin
   });
 
   try {
-    // response.text is a property, not a method
     return JSON.parse(response.text || '[]');
   } catch (e) {
     console.error("Failed to parse Gemini response", e);
@@ -64,27 +63,55 @@ export const processText = async (text: string): Promise<{ en: string; fa: strin
   }
 };
 
-// Generate TTS audio using Gemini 2.5 Flash TTS
+export const getWordDefinition = async (
+  word: string, 
+  context: string, 
+  targetLang: string
+): Promise<{ word: string, definition: string, example: string }> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const response = await ai.models.generateContent({
+    model: 'gemini-3-flash-preview',
+    contents: `Explain the word "${word}" as used in this context: "${context}". Provide the definition and an example sentence in ${targetLang}.`,
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          word: { type: Type.STRING },
+          definition: { type: Type.STRING },
+          example: { type: Type.STRING }
+        },
+        required: ["word", "definition", "example"]
+      }
+    }
+  });
+  return JSON.parse(response.text || '{}');
+};
+
+const VOICE_MAP: Record<string, string> = {
+  'English': 'Kore',
+  'Persian': 'Puck',
+  'Spanish': 'Zephyr',
+  'French': 'Charon',
+  'German': 'Fenrir'
+};
+
 export const generateTTS = async (
   text: string, 
-  language: 'en' | 'fa', 
+  langName: string, 
   audioContext: AudioContext
 ): Promise<AudioBuffer | null> => {
-  // Always use process.env.API_KEY directly in the constructor
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const voiceName = VOICE_MAP[langName] || 'Kore';
   
-  const prompt = language === 'en' 
-    ? `Say clearly: ${text}` 
-    : `بگو: ${text}`;
-
   const response = await ai.models.generateContent({
     model: "gemini-2.5-flash-preview-tts",
-    contents: [{ parts: [{ text: prompt }] }],
+    contents: [{ parts: [{ text }] }],
     config: {
       responseModalities: [Modality.AUDIO],
       speechConfig: {
         voiceConfig: {
-          prebuiltVoiceConfig: { voiceName: language === 'en' ? 'Kore' : 'Puck' },
+          prebuiltVoiceConfig: { voiceName },
         },
       },
     },
