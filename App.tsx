@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { PlaybackState, Sentence, Chapter, Book, Definition } from './types';
 import { processText, generateTTS, getWordDefinition } from './services/gemini';
@@ -26,9 +25,9 @@ const App: React.FC = () => {
   const activeSourceRef = useRef<AudioBufferSourceNode | null>(null);
   const preloadQueueRef = useRef<Set<number>>(new Set());
 
-  // Persistence: Load
+  // Persistence: Load Library
   useEffect(() => {
-    const saved = localStorage.getItem('lingoflow_vault_v1');
+    const saved = localStorage.getItem('lingoflow_vault_v2');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -40,10 +39,10 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Persistence: Save
+  // Persistence: Save Library
   useEffect(() => {
     if (library.length > 0) {
-      localStorage.setItem('lingoflow_vault_v1', JSON.stringify(library));
+      localStorage.setItem('lingoflow_vault_v2', JSON.stringify(library));
     }
   }, [library]);
 
@@ -58,7 +57,7 @@ const App: React.FC = () => {
 
   const handleFileUpload = async (text: string, sourceLang: string, targetLang: string, title?: string) => {
     setPlaybackState(PlaybackState.PROCESSING);
-    setLoadingProgress(15);
+    setLoadingProgress(10);
     setView('READER');
     
     try {
@@ -73,7 +72,7 @@ const App: React.FC = () => {
 
       const newBook: Book = {
         id: Date.now().toString(),
-        title: title || (text.slice(0, 40) + "..."),
+        title: title || (text.slice(0, 30).trim() + "..."),
         sourceLang,
         targetLang,
         createdAt: Date.now(),
@@ -88,7 +87,7 @@ const App: React.FC = () => {
       console.error(error);
       setPlaybackState(PlaybackState.IDLE);
       setView('UPLOAD');
-      alert("Neural Ingestion Failed.");
+      alert("Neural Processing Fault. Check API connection.");
     }
   };
 
@@ -133,7 +132,7 @@ const App: React.FC = () => {
         sentence.faAudio = await generateTTS(sentence.faText, activeBook.targetLang, ctx) || undefined;
       }
     } catch (e) {
-      console.warn("Neural Cache Miss", index);
+      console.warn("Neural Buffer Miss", index);
     } finally {
       preloadQueueRef.current.delete(index);
     }
@@ -150,6 +149,7 @@ const App: React.FC = () => {
     initAudioContext();
     const ctx = audioContextRef.current!;
 
+    // Pre-warm the next 2 vectors
     preloadSentence(index + 1);
     preloadSentence(index + 2);
 
@@ -164,7 +164,7 @@ const App: React.FC = () => {
         if (enBuffer) {
           await playAudio(enBuffer, () => playSentence(index, true));
         } else {
-          playSentence(index, true);
+          playSentence(index, true); // Fallback if audio fails
         }
       } else {
         setPlaybackState(PlaybackState.PLAYING_FA);
@@ -229,13 +229,13 @@ const App: React.FC = () => {
       const def = await getWordDefinition(word, context, activeBook.targetLang);
       setDefinition(def);
     } catch (e) {
-      alert("Lexical lookup failed.");
+      alert("Neural Lookup Error.");
     } finally {
       setDefLoading(false);
     }
   };
 
-  // Keyboard Navigation
+  // Global Keyboard Logic
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (view !== 'READER' || definition || defLoading) return;
@@ -255,12 +255,12 @@ const App: React.FC = () => {
   }, [view, handlePlayToggle, handleNext, handlePrev, definition, defLoading]);
 
   return (
-    <div className="flex flex-col h-screen bg-slate-950 overflow-hidden font-sans text-slate-100">
+    <div className="flex flex-col h-screen bg-slate-950 overflow-hidden font-sans text-slate-100 selection:bg-sky-500/30">
       <Header currentView={view} setView={setView} />
       
       <main className="flex-1 overflow-hidden relative">
         {view === 'UPLOAD' && (
-          <div className="h-full overflow-y-auto flex flex-col items-center p-8">
+          <div className="h-full overflow-y-auto flex flex-col items-center p-8 scroll-smooth">
             <UploadSection onUpload={handleFileUpload} />
           </div>
         )}
@@ -268,35 +268,40 @@ const App: React.FC = () => {
         {view === 'LIBRARY' && (
           <div className="h-full overflow-y-auto p-8 max-w-4xl mx-auto w-full">
             <h3 className="text-2xl font-black text-white italic tracking-tighter uppercase mb-8 flex items-center gap-3">
-              <span className="w-2 h-8 cyber-bg-blue"></span>
-              Ingested Memory Vault
+              <span className="w-1.5 h-6 bg-sky-500 rounded-full shadow-[0_0_10px_rgba(56,189,248,0.5)]"></span>
+              Neural Repository
             </h3>
             {library.length === 0 ? (
-              <div className="cyber-card p-12 rounded-3xl text-center border-dashed border-slate-800">
-                <p className="text-slate-500 mono uppercase tracking-widest text-sm">Vault_Empty: Ingest text to begin</p>
+              <div className="cyber-card p-16 rounded-3xl text-center border-dashed border-slate-800">
+                <p className="text-slate-500 mono uppercase tracking-widest text-xs">No active datasets found</p>
                 <button 
                   onClick={() => setView('UPLOAD')}
-                  className="mt-6 text-sky-400 font-bold hover:underline"
+                  className="mt-6 text-sky-400 font-bold hover:text-white transition-colors text-sm uppercase mono"
                 >
-                  Go to Processing Station ->
+                  Initiate_Inbound_Transfer ->
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-4">
+              <div className="grid grid-cols-1 gap-6 pb-20">
                 {library.map(book => (
                   <div 
                     key={book.id}
                     onClick={() => { setActiveBook(book); setView('READER'); setCurrentIndex(0); }}
-                    className="cyber-card p-6 rounded-2xl group cursor-pointer hover:border-sky-500/50 transition-all flex justify-between items-center"
+                    className="cyber-card p-8 rounded-3xl group cursor-pointer hover:border-sky-500/40 hover:bg-slate-900/50 transition-all flex justify-between items-center"
                   >
                     <div>
-                      <h4 className="text-lg font-bold text-white group-hover:text-sky-400 transition-colors uppercase tracking-tight italic">{book.title}</h4>
-                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mono mt-1">
-                        Neural_Link: {book.sourceLang} → {book.targetLang} • {book.chapters[0].sentences.length} Vectors
-                      </p>
+                      <h4 className="text-xl font-bold text-white group-hover:text-sky-400 transition-colors uppercase italic tracking-tight">{book.title}</h4>
+                      <div className="flex gap-4 mt-2">
+                         <span className="text-[10px] text-slate-500 font-black mono uppercase tracking-widest">
+                          {book.sourceLang} → {book.targetLang}
+                        </span>
+                        <span className="text-[10px] text-sky-500/60 font-black mono uppercase tracking-widest">
+                          {book.chapters[0].sentences.length} Lexical_Vectors
+                        </span>
+                      </div>
                     </div>
-                    <div className="p-3 rounded-xl bg-slate-900 text-slate-500 group-hover:bg-sky-500 group-hover:text-white transition-all">
-                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                    <div className="p-4 rounded-2xl bg-slate-900 text-slate-700 group-hover:bg-sky-500 group-hover:text-white transition-all shadow-inner">
+                      <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
                       </svg>
                     </div>
@@ -310,16 +315,16 @@ const App: React.FC = () => {
         {view === 'READER' && (
           <div className="h-full flex flex-col">
             {playbackState === PlaybackState.PROCESSING && (
-              <div className="absolute inset-0 z-50 bg-slate-950/95 backdrop-blur-xl flex flex-col items-center justify-center p-12">
-                <div className="w-64 h-64 relative flex items-center justify-center mb-8">
-                  <div className="absolute inset-0 border-4 border-sky-500/20 rounded-full"></div>
-                  <div className="absolute inset-0 border-t-4 border-sky-500 rounded-full animate-spin"></div>
+              <div className="absolute inset-0 z-50 bg-slate-950/95 backdrop-blur-3xl flex flex-col items-center justify-center p-12">
+                <div className="w-48 h-48 relative flex items-center justify-center mb-8">
+                  <div className="absolute inset-0 border-2 border-sky-500/10 rounded-full"></div>
+                  <div className="absolute inset-0 border-t-2 border-sky-500 rounded-full animate-spin"></div>
                   <div className="text-center">
-                    <span className="text-4xl font-black text-white italic">{loadingProgress}%</span>
-                    <p className="text-[10px] text-sky-400 mono font-bold uppercase tracking-widest mt-2">Neural_Synthesis</p>
+                    <span className="text-3xl font-black text-white italic tracking-tighter">{loadingProgress}%</span>
+                    <p className="text-[9px] text-sky-400 mono font-bold uppercase tracking-widest mt-1">Ingesting</p>
                   </div>
                 </div>
-                <p className="text-slate-500 mono uppercase tracking-widest text-xs animate-pulse">Mapping lexical vectors to neural pathways...</p>
+                <p className="text-slate-500 mono uppercase tracking-widest text-[10px] animate-pulse">Synchronizing neural linguistic pathways...</p>
               </div>
             )}
 
@@ -355,9 +360,9 @@ const App: React.FC = () => {
 
       {activeBook && view === 'READER' && (
         <button 
-          onClick={() => setView('LIBRARY')}
+          onClick={() => { stopPlayback(); setView('LIBRARY'); setPlaybackState(PlaybackState.IDLE); }}
           className="fixed top-24 left-8 z-30 p-3 cyber-card rounded-xl text-slate-500 hover:text-sky-400 transition-all border border-slate-800"
-          title="Return to Vault"
+          title="Exit to Vault"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
