@@ -277,10 +277,9 @@ const App: React.FC = () => {
                 <button 
                   onClick={() => setView('UPLOAD')}
                   className="mt-6 text-sky-400 font-bold hover:text-white transition-colors text-sm uppercase mono"
-                >
-                  Initiate_Inbound_Transfer ->
-                </button>
-              </div>
+                                  >
+                                    Initiate_Inbound_Transfer &rarr;
+                                  </button>              </div>
             ) : (
               <div className="grid grid-cols-1 gap-6 pb-20">
                 {library.map(book => (

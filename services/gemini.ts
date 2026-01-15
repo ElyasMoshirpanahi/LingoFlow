@@ -1,7 +1,7 @@
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 
 const getApiKey = () => {
-  return process.env.API_KEY || '';
+  return import.meta.env.VITE_API_KEY || '';
 };
 
 export const decodeBase64 = (base64: string): Uint8Array => {

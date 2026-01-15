@@ -1,0 +1,5 @@
+{
+  "name": "LingoFlow Interleaved Reader",
+  "description": "A bilingual audiobook player that alternates English sentences with Persian translations, featuring real-time highlighting and continuous TTS playback.",
+  "requestFramePermissions": []
+}
