@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { extractTextFromPDF } from '../services/pdf';
 
 interface UploadSectionProps {
   onUpload: (text: string, sourceLang: string, targetLang: string, title?: string) => void;
@@ -11,6 +12,7 @@ const UploadSection: React.FC<UploadSectionProps> = ({ onUpload }) => {
   const [sourceLang, setSourceLang] = useState('English');
   const [targetLang, setTargetLang] = useState('Persian');
   const [isDragging, setIsDragging] = useState(false);
+  const [isParsing, setIsParsing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -20,16 +22,26 @@ const UploadSection: React.FC<UploadSectionProps> = ({ onUpload }) => {
     }
   };
 
-  const handleFile = (file: File) => {
-    if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const text = e.target?.result as string;
-        onUpload(text, sourceLang, targetLang, file.name.replace('.txt', ''));
-      };
-      reader.readAsText(file);
-    } else {
-      alert('Please upload a .txt file.');
+  const handleFile = async (file: File) => {
+    setIsParsing(true);
+    try {
+      if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
+        const text = await extractTextFromPDF(file);
+        onUpload(text, sourceLang, targetLang, file.name.replace('.pdf', ''));
+      } else if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const text = e.target?.result as string;
+          onUpload(text, sourceLang, targetLang, file.name.replace('.txt', ''));
+        };
+        reader.readAsText(file);
+      } else {
+        alert('Format not supported. Please upload a .pdf or .txt file.');
+      }
+    } catch (err) {
+      alert('Neural Scan Error: Failed to extract text from document.');
+    } finally {
+      setIsParsing(false);
     }
   };
 
@@ -44,12 +56,14 @@ const UploadSection: React.FC<UploadSectionProps> = ({ onUpload }) => {
     <div className="w-full max-w-2xl cyber-card rounded-3xl p-8 mt-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <div className="text-center mb-8">
         <div className="inline-flex items-center justify-center p-4 bg-sky-500/10 rounded-2xl mb-4 border border-sky-500/20">
-          <svg className="w-8 h-8 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className={`w-8 h-8 text-sky-400 ${isParsing ? 'animate-pulse' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
           </svg>
         </div>
         <h2 className="text-3xl font-black text-white mb-2 tracking-tight">INGEST CONTENT</h2>
-        <p className="text-slate-500 text-sm mono">Select parameters for neural translation & synthesis.</p>
+        <p className="text-slate-500 text-sm mono">
+          {isParsing ? 'SCANN_DOCUMENT_VECTOR...' : 'Select parameters for neural translation & synthesis.'}
+        </p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -77,24 +91,34 @@ const UploadSection: React.FC<UploadSectionProps> = ({ onUpload }) => {
         </div>
 
         <div 
-          className={`relative border-2 border-dashed rounded-2xl p-6 transition-all ${
+          className={`relative border-2 border-dashed rounded-2xl p-6 transition-all cursor-pointer ${
             isDragging ? 'border-sky-500 bg-sky-500/5' : 'border-slate-800 hover:border-slate-700'
-          }`}
+          } ${isParsing ? 'opacity-50 cursor-wait' : ''}`}
           onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
           onDragLeave={() => setIsDragging(false)}
           onDrop={handleDrop}
-          onClick={() => fileInputRef.current?.click()}
+          onClick={() => !isParsing && fileInputRef.current?.click()}
         >
           <input 
             type="file" 
             ref={fileInputRef} 
             onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
             className="hidden" 
-            accept=".txt"
+            accept=".txt,.pdf"
+            disabled={isParsing}
           />
-          <div className="text-center cursor-pointer">
-            <p className="text-slate-400 text-sm mb-1 font-bold">Drop text file here or <span className="text-sky-400 underline">browse</span></p>
-            <p className="text-[10px] text-slate-600 mono uppercase">Encrypted Local Processing</p>
+          <div className="text-center">
+            {isParsing ? (
+              <div className="flex flex-col items-center gap-2">
+                <div className="w-4 h-4 border-2 border-sky-500 border-t-transparent rounded-full animate-spin"></div>
+                <p className="text-[10px] text-sky-400 mono uppercase font-bold">Scanning_Lexical_Layers</p>
+              </div>
+            ) : (
+              <>
+                <p className="text-slate-400 text-sm mb-1 font-bold">Drop PDF or TXT here or <span className="text-sky-400 underline">browse</span></p>
+                <p className="text-[10px] text-slate-600 mono uppercase tracking-[0.1em]">Encrypted Local Ingestion</p>
+              </>
+            )}
           </div>
         </div>
 
@@ -103,17 +127,18 @@ const UploadSection: React.FC<UploadSectionProps> = ({ onUpload }) => {
           <textarea
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
-            className="w-full h-32 p-4 rounded-2xl border border-slate-800 bg-slate-900/50 focus:ring-1 focus:ring-sky-500 outline-none transition-all resize-none text-slate-300 mono text-xs leading-relaxed"
+            disabled={isParsing}
+            className="w-full h-32 p-4 rounded-2xl border border-slate-800 bg-slate-900/50 focus:ring-1 focus:ring-sky-500 outline-none transition-all resize-none text-slate-300 mono text-xs leading-relaxed disabled:opacity-30"
             placeholder="[SYSTEM_WAITING_FOR_DATA]"
           />
         </div>
 
         <button
           type="submit"
-          disabled={!inputText.trim()}
-          className="w-full cyber-bg-blue text-white font-black py-4 px-8 rounded-2xl shadow-lg hover:brightness-110 hover:translate-y-[-1px] active:translate-y-0 transition-all disabled:opacity-50 disabled:grayscale uppercase tracking-widest text-sm italic"
+          disabled={!inputText.trim() || isParsing}
+          className="w-full cyber-bg-blue text-white font-black py-4 px-8 rounded-2xl shadow-lg hover:brightness-110 hover:translate-y-[-1px] active:translate-y-0 transition-all disabled:opacity-50 disabled:grayscale uppercase tracking-widest text-sm italic flex items-center justify-center gap-3"
         >
-          Execute Neural Processing
+          {isParsing ? 'SCANNING...' : 'Execute Neural Processing'}
         </button>
       </form>
     </div>

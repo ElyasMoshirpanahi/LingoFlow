@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LingoFlow | Neural Reader</title>
-    <!-- Restoring Tailwind CDN to ensure all utility classes (flex, w-6, etc.) are available -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Naskh+Arabic:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <script>
@@ -35,7 +34,6 @@
             --cyber-card: rgba(15, 23, 42, 0.7);
             --cyber-blue: #0ea5e9;
             --cyber-neon: #38bdf8;
-            --cyber-emerald: #10b981;
         }
 
         body {
@@ -44,6 +42,14 @@
             overflow: hidden;
             margin: 0;
             font-family: 'Inter', sans-serif;
+        }
+
+        /* Standardize Icons */
+        svg {
+            width: 24px;
+            height: 24px;
+            display: inline-block;
+            vertical-align: middle;
         }
 
         .persian-text {
@@ -56,10 +62,6 @@
             backdrop-filter: blur(16px);
             border: 1px solid rgba(51, 65, 85, 0.4);
             box-shadow: 0 8px 32px -4px rgba(0, 0, 0, 0.5);
-        }
-
-        .cyber-glow-blue {
-            box-shadow: 0 0 20px rgba(14, 165, 233, 0.3);
         }
 
         .cyber-glow-text {
@@ -101,15 +103,8 @@
         }
 
         .mono { font-family: 'JetBrains Mono', monospace; }
-        
         .cyber-bg-blue { background-color: var(--cyber-blue) !important; }
         .cyber-accent-blue { color: var(--cyber-neon) !important; }
-
-        /* Fix for giant icons if CSS fails to load early */
-        svg {
-            max-width: 100%;
-            height: auto;
-        }
     </style>
 <script type="importmap">
 {
@@ -117,8 +112,9 @@
     "react": "https://esm.sh/react@^19.2.3",
     "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
     "react/": "https://esm.sh/react@^19.2.3/",
-    "@google/genai": "https://esm.sh/@google/genai@^1.35.0",
-    "vite": "https://esm.sh/vite@^7.3.1"
+    "@google/genai": "https://esm.sh/@google/genai@^1.36.0",
+    "vite": "https://esm.sh/vite@^7.3.1",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2"
   }
 }
 </script>
@@ -126,7 +122,6 @@
 <body class="font-sans">
     <div class="scanline"></div>
     <div id="root"></div>
-    <!-- Vite handles the module loading from index.tsx -->
     <script type="module" src="index.tsx"></script>
 </body>
 </html>
